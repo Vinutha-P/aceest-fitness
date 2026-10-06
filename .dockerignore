@@ -1,0 +1,39 @@
+# Version control
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Environments
+.venv/
+venv/
+env/
+
+# Runtime data
+instance/
+*.db
+*.sqlite3
+
+# CI / tooling config not needed at runtime
+.github/
+Jenkinsfile
+.dockerignore
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Docs & secrets
+README.md
+.env
+.env.*

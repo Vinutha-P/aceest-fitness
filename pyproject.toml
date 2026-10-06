@@ -1,0 +1,10 @@
+[project]
+name = "aceest-fitness"
+version = "1.0.0"
+description = "ACEest Fitness & Gym management application with CI/CD pipeline"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"

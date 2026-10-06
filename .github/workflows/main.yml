@@ -1,0 +1,121 @@
+name: CI Pipeline
+
+# Trigger on every push and pull request, as required by the assignment.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+# Cancel superseded in-progress runs on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint with flake8
+        run: |
+          # --exit-zero would hide problems; instead fail the build on real errors.
+          python -m flake8 .
+
+      - name: Compile check (syntax validation)
+        run: python -m compileall -q aceest app.py
+
+  test:
+    name: Automated Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest suite
+        run: python -m pytest -v --cov=aceest --cov-report=xml --cov-report=term
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  docker:
+    name: Docker Image Assembly
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: aceest-fitness:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run tests inside the container
+        # The container image only ships runtime deps, so install pytest
+        # inside the container to execute the suite in the built environment.
+        run: |
+          docker run --rm -v "${{ github.workspace }}/tests:/app/tests:ro" \
+            aceest-fitness:ci sh -c "
+              pip install --no-cache-dir pytest pytest-cov >/dev/null 2>&1 &&
+              python -m pytest -q /app/tests
+            "
+
+      - name: Smoke test the container
+        run: |
+          docker run -d --name aceest-test -p 5000:5000 aceest-fitness:ci
+          # Give the app a moment to start before polling the health endpoint.
+          for i in $(seq 1 15); do
+            if curl -fsS http://localhost:5000/health; then
+              echo ""
+              echo "Container health check passed."
+              docker rm -f aceest-test
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Container failed to become healthy."
+          docker logs aceest-test
+          docker rm -f aceest-test
+          exit 1
